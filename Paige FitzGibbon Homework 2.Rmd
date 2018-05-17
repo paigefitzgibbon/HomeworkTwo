@@ -1,0 +1,96 @@
+---
+title: "Homework 2"
+author: Paige FitzGibbon
+output: html_document
+---
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+```
+
+##Loading of Packages
+```{r loading, message=FALSE, results=FALSE, warning=FALSE}
+library(tidyverse)
+library(readr)
+library(dplyr)
+library(dbplyr)
+library(DBI)
+library(RSQLite)
+```
+
+
+##Code and SQL Snippets
+```{r dataset, message=FALSE, results=FALSE, warning=FALSE}
+
+gaz <- read_delim("CA_Features_20180401.txt", 
+    "|",col_types = cols(
+        DATE_CREATED = col_date(format = "%m/%d/%Y"), 
+        DATE_EDITED = col_date(format = "%m/%d/%Y"), 
+        STATE_NUMERIC = col_integer()))
+natural <- read_csv("calprops_edited.csv")
+naturalt <- as.tibble(natural)
+con <- dbConnect(SQLite(), dbname="gaz.db")
+copy_to(con, gaz, "gaz", temporary = FALSE, overwrite=TRUE)
+copy_to(con, naturalt, "naturalt", temporary=FALSE, overwrite=TRUE)
+
+
+
+
+
+mostcommon <- dbGetQuery(con, "select FEATURE_NAME, count(FEATURE_NAME) from gaz where STATE_ALPHA == 'CA' and COUNTY_NAME != 'na' group by FEATURE_NAME order by count(FEATURE_NAME) desc limit 10")
+leastcommon <- dbGetQuery(con, "SELECT FEATURE_CLASS, count(FEATURE_CLASS) from gaz where STATE_ALPHA == 'CA'and COUNTY_NAME != 'na' group by FEATURE_CLASS order by count(FEATURE_CLASS) asc limit 10")
+centerpoint <- dbGetQuery(con, "select COUNTY_NAME, avg(PRIM_LAT_DEC), avg(PRIM_LONG_DEC) from gaz where PRIM_LAT_DEC != 0 and PRIM_LONG_DEC !=0 and STATE_ALPHA == 'CA'and COUNTY_NAME != 'na' group by COUNTY_NAME")
+
+
+dbGetQuery(con, "select FEATURE_CLASS, NATURAL, MANMADE, TOTALFEATURE from naturalt")
+JOINED_TABLE <- dbGetQuery(con, "SELECT gaz.COUNTY_NAME, sum(naturalt.NATURAL), sum(naturalt.MANMADE), sum(naturalt.TOTALFEATURE), gaz.STATE_ALPHA FROM naturalt LEFT JOIN gaz ON naturalt.FEATURE_CLASS = gaz.FEATURE_CLASS group by COUNTY_NAME")
+copy_to(con, JOINED_TABLE, "joined_table", TEMPORARY= FALSE, overwrite=TRUE)
+
+filtered_table <- dbGetQuery(con, "select * from joined_table where STATE_ALPHA == 'CA'")
+
+copy_to(con, filtered_table, "filter_table1", temporary=FALSE, overwrite=TRUE)
+
+colnames(filtered_table) <- c("County", "Natural", "Manmade", "Total", "State")
+
+copy_to(con, filtered_table, "named", temporary=FALSE, overwrite=TRUE)
+
+prop_natural <- dbGetQuery(con, "select County, Natural, Total, round(cast(Natural as float)/cast(Total as float),2) from named where County != 'na'")
+prop_manmade <- dbGetQuery(con, "select County, Manmade, Total, round(cast(manmade as float)/cast(Total as float),2) from named where County != 'na'")
+
+colnames(prop_natural) <- c("County", "Number Natural Features", "Total Number Features", "Proportion Natural")
+colnames(prop_manmade) <-c("County", "Number Manmade Features", "Total Number Features", "Proportion Manmade")
+
+
+
+```
+
+###What is the most common feature name?
+```{r most}
+mostcommon
+
+```
+
+
+###What is the least common feature name?
+```{r least}
+leastcommon
+```
+
+
+##What is the approximate center point of each county?
+```{r center}
+centerpoint
+```
+
+##What is the proportion natural features?
+```{r natural}
+prop_natural
+```
+
+##What is the proportion manmade features?
+```{r manmade}
+prop_manmade
+```
+
