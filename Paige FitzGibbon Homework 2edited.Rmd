@@ -1,0 +1,138 @@
+---
+title: "Homework 2"
+author: Paige FitzGibbon
+output: html_document
+---
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+```
+
+##Loading of Packages
+```{r loading, message=FALSE, results=FALSE, warning=FALSE}
+library(tidyverse)
+library(readr)
+library(dplyr)
+library(dbplyr)
+library(DBI)
+library(RSQLite)
+```
+
+
+##Correct Steps 1-4 Taken from Frew's Solution
+```{r dataset, message=FALSE, results=FALSE, warning=FALSE}
+
+gaz_raw <-
+  read_delim(
+    "CA_Features_20180401.txt",
+    delim = "|",
+    col_types = cols(.default = col_character())
+  )
+gaz_raw
+
+gaz <-
+  select(gaz_raw,
+    id         = FEATURE_ID,
+    name       = FEATURE_NAME,
+    class      = FEATURE_CLASS,
+    state      = STATE_ALPHA,
+    county     = COUNTY_NAME,
+    lat        = PRIM_LAT_DEC,
+    lon        = PRIM_LONG_DEC,
+    src_lat    = SOURCE_LAT_DEC,
+    src_lon    = SOURCE_LONG_DEC,
+    elev       = ELEV_IN_M,
+    map        = MAP_NAME,
+    created_on = DATE_CREATED,
+    edited_on  = DATE_EDITED
+  )
+
+gaz$id         = parse_integer(gaz$id)
+gaz$lat        = parse_double(gaz$lat, na = "0")
+gaz$lon        = parse_double(gaz$lon, na = "0")
+gaz$src_lat    = parse_double(gaz$src_lat)
+gaz$src_lon    = parse_double(gaz$src_lon)
+gaz$elev       = parse_integer(gaz$elev)
+gaz$map        = parse_character(gaz$map, na = "Unknown")
+gaz$created_on = parse_date(gaz$created_on, format = "%m/%d/%Y")
+gaz$edited_on  = parse_date(gaz$edited_on, format = "%m/%d/%Y")
+
+
+
+
+
+```
+
+
+##My Work for Steps 1-5 
+```{r}
+
+natural <- read_csv("calprops_edited.csv")
+naturalt <- as.tibble(natural)
+
+
+con <- dbConnect(SQLite(), dbname="gaz.db")
+copy_to(con, gaz, "gaz", temporary = FALSE, overwrite=TRUE)
+copy_to(con, naturalt, "naturalt", temporary=FALSE, overwrite=TRUE)
+
+
+
+
+
+mostcommon <- dbGetQuery(con, "select name, count(name) from gaz where state == 'CA' and county != 'na' group by name order by count(name) desc limit 10")
+leastcommon <- dbGetQuery(con, "SELECT class, count(class) from gaz where state == 'CA'and county != 'na' group by class order by count(class) asc limit 10")
+centerpoint <- dbGetQuery(con, "select county, (max(lat)+min(lat))*0.5, (max(lon)+min(lon))*0.5 from gaz where lat != 'na' and lon != 'na' and state == 'CA'and county != 'na' group by county")
+
+
+dbGetQuery(con, "select FEATURE_CLASS, NATURAL, MANMADE, TOTALFEATURE from naturalt")
+JOINED_TABLE <- dbGetQuery(con, "SELECT gaz.county, sum(naturalt.NATURAL), sum(naturalt.MANMADE), sum(naturalt.TOTALFEATURE), gaz.state FROM naturalt LEFT JOIN gaz ON naturalt.FEATURE_CLASS = gaz.class group by county")
+copy_to(con, JOINED_TABLE, "joined_table", TEMPORARY= FALSE, overwrite=TRUE)
+
+filtered_table <- dbGetQuery(con, "select * from joined_table where state == 'CA'")
+
+copy_to(con, filtered_table, "filter_table1", temporary=FALSE, overwrite=TRUE)
+
+colnames(filtered_table) <- c("County", "Natural", "Manmade", "Total", "State")
+
+copy_to(con, filtered_table, "named", temporary=FALSE, overwrite=TRUE)
+
+prop_natural <- dbGetQuery(con, "select County, Natural, Total, round(cast(Natural as float)/cast(Total as float),3) from named where County != 'na'")
+prop_manmade <- dbGetQuery(con, "select County, Manmade, Total, round(cast(manmade as float)/cast(Total as float),3) from named where County != 'na'")
+
+colnames(prop_natural) <- c("County", "Number Natural Features", "Total Number Features", "Proportion Natural")
+colnames(prop_manmade) <-c("County", "Number Manmade Features", "Total Number Features", "Proportion Manmade")
+
+
+
+```
+
+###What is the most common feature name?
+```{r most}
+mostcommon
+
+```
+
+
+###What is the least common feature name?
+```{r least}
+leastcommon
+```
+
+
+##What is the approximate center point of each county?
+```{r center}
+centerpoint
+```
+
+##What is the proportion natural features?
+```{r natural}
+prop_natural
+```
+
+##What is the proportion manmade features?
+```{r manmade}
+prop_manmade
+```
+
