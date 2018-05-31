@@ -22,7 +22,7 @@ library(RSQLite)
 
 
 ##Correct Steps 1-4 Taken from Frew's Solution
-```{r dataset, message=FALSE, results=FALSE, warning=FALSE}
+```{r frewwork, message=FALSE, results=FALSE, warning=FALSE}
 
 gaz_raw <-
   read_delim(
@@ -67,7 +67,7 @@ gaz$edited_on  = parse_date(gaz$edited_on, format = "%m/%d/%Y")
 
 
 ##My Work for Steps 1-5 
-```{r}
+```{r mywork}
 
 natural <- read_csv("calprops_edited.csv")
 naturalt <- as.tibble(natural)
